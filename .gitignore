@@ -1,0 +1,34 @@
+# 環境變數（含密碼）
+.env
+.env.local
+
+# 真實營業資料 — 絕對不要進版控
+Order.completed.*.xlsx
+紙本對帳_*.csv
+paper_*.csv
+對帳表_*.xlsx
+差異日明細_*.xlsx
+工程師獎金_*.xlsx
+note_quality_warnings*.xlsx
+
+# 測試產出
+_test_data/
+test_data/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
