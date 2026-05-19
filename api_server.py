@@ -20,7 +20,7 @@ from typing import List, Optional
 from datetime import datetime
 
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -108,7 +108,161 @@ class ReconcileResp(BaseModel):
 @app.get("/", summary="健康檢查")
 def root():
     return {"service": "shopee-reconcile-api", "version": "1.0.0",
-            "docs": f"{PUBLIC_BASE_URL}/docs"}
+            "docs": f"{PUBLIC_BASE_URL}/docs",
+            "upload_ui": f"{PUBLIC_BASE_URL}/upload-ui"}
+
+
+UPLOAD_UI_HTML = """<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Shopee 對帳 — 檔案上傳</title>
+<style>
+:root { --c1:#1F4E78; --c2:#F4B084; --c3:#FFE699; --bg:#f5f7fa; }
+*{box-sizing:border-box}
+body{font-family:"Microsoft JhengHei","Segoe UI",sans-serif;background:var(--bg);
+     margin:0;padding:20px;color:#222}
+.wrap{max-width:780px;margin:0 auto}
+h1{color:var(--c1);font-size:22px;margin:0 0 6px}
+.sub{color:#666;font-size:13px;margin-bottom:18px}
+.card{background:#fff;border-radius:10px;padding:18px;margin-bottom:14px;
+      box-shadow:0 2px 6px rgba(0,0,0,.06)}
+.drop{border:2px dashed #aac;border-radius:10px;padding:38px 16px;text-align:center;
+      background:#fafbfd;cursor:pointer;transition:.2s}
+.drop:hover,.drop.over{background:#eef3fa;border-color:var(--c1)}
+.drop p{margin:0;color:#557}
+input[type=file]{display:none}
+.kv{display:grid;grid-template-columns:130px 1fr auto;gap:6px 12px;
+    align-items:center;padding:10px;border-bottom:1px solid #eee;font-size:14px}
+.kv:last-child{border:none}
+.kv .lbl{color:#778}
+.kv .val{font-family:Consolas,monospace;background:#f4f6fa;padding:4px 8px;
+         border-radius:4px;word-break:break-all}
+.btn{background:var(--c1);color:#fff;border:none;padding:8px 16px;border-radius:6px;
+     cursor:pointer;font-size:13px}
+.btn:hover{opacity:.9}
+.btn.sm{padding:4px 10px;font-size:12px}
+.btn.gh{background:#888}
+.snip{background:#1e2733;color:#cfe;padding:12px 14px;border-radius:6px;
+      font-family:Consolas,monospace;font-size:13px;white-space:pre-wrap;
+      word-break:break-all;line-height:1.55}
+.snip .k{color:#fc6}
+.note{font-size:12px;color:#789;margin-top:8px}
+.lbl-tag{display:inline-block;background:var(--c3);padding:2px 8px;
+         border-radius:3px;font-size:11px;color:#664}
+.lbl-tag.csv{background:#cde}
+.tip{background:#fff8e6;border-left:3px solid var(--c2);padding:10px 14px;
+     font-size:13px;color:#665}
+.empty{color:#aab;text-align:center;padding:14px;font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Shopee 對帳 · 檔案上傳</h1>
+  <div class="sub">拖入 Excel + 紙本 CSV → 取得 file_id → 貼到 Chatbot UI 對話框</div>
+
+  <div class="card">
+    <div id="drop" class="drop" onclick="document.getElementById('fi').click()">
+      <p>📎 把 Excel (.xlsx) 與紙本 CSV 拖到這裡</p>
+      <p style="font-size:12px;color:#99a;margin-top:6px">或點此選檔案</p>
+    </div>
+    <input type="file" id="fi" multiple accept=".xlsx,.xls,.csv">
+  </div>
+
+  <div class="card">
+    <h3 style="margin:0 0 10px;font-size:15px;color:var(--c1)">已上傳檔案</h3>
+    <div id="list" class="empty">尚未上傳檔案</div>
+  </div>
+
+  <div class="card" id="snipCard" style="display:none">
+    <h3 style="margin:0 0 8px;font-size:15px;color:var(--c1)">複製這段到 Chatbot UI 對話框</h3>
+    <div class="tip">直接告訴 Assistant：「請用以下 file_id 對帳」並貼上下方文字</div>
+    <div style="margin-top:10px">
+      <div class="snip" id="snip"></div>
+      <div style="margin-top:8px;display:flex;gap:8px">
+        <button class="btn" onclick="copySnip()">📋 複製</button>
+        <button class="btn gh" onclick="clearAll()">🗑️ 清空重來</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const drop = document.getElementById('drop');
+const fi = document.getElementById('fi');
+const list = document.getElementById('list');
+const snipCard = document.getElementById('snipCard');
+const snipEl = document.getElementById('snip');
+let uploaded = [];  // [{file_id, filename, type}]
+
+['dragenter','dragover'].forEach(e => drop.addEventListener(e, ev => {
+  ev.preventDefault(); drop.classList.add('over');
+}));
+['dragleave','drop'].forEach(e => drop.addEventListener(e, ev => {
+  ev.preventDefault(); drop.classList.remove('over');
+}));
+drop.addEventListener('drop', ev => uploadFiles(ev.dataTransfer.files));
+fi.addEventListener('change', () => uploadFiles(fi.files));
+
+async function uploadFiles(files) {
+  for (const f of files) {
+    const fd = new FormData();
+    fd.append('file', f);
+    const res = await fetch('/upload', {method:'POST', body:fd});
+    if (!res.ok) { alert('上傳失敗: ' + f.name); continue; }
+    const data = await res.json();
+    const isCSV = f.name.toLowerCase().endsWith('.csv');
+    uploaded.push({file_id:data.file_id, filename:data.filename, type:isCSV?'csv':'excel'});
+  }
+  render();
+}
+
+function render() {
+  if (uploaded.length === 0) {
+    list.className = 'empty'; list.innerHTML = '尚未上傳檔案';
+    snipCard.style.display = 'none'; return;
+  }
+  list.className = '';
+  list.innerHTML = uploaded.map((u,i) => `
+    <div class="kv">
+      <span class="lbl">${u.type==='csv'?'<span class="lbl-tag csv">紙本</span>':'<span class="lbl-tag">Excel</span>'}</span>
+      <span>${u.filename}<br><span class="val">${u.file_id}</span></span>
+      <button class="btn sm gh" onclick="removeFile(${i})">×</button>
+    </div>
+  `).join('');
+
+  const excels = uploaded.filter(u=>u.type==='excel');
+  const csv = uploaded.find(u=>u.type==='csv');
+  if (excels.length === 0) { snipCard.style.display = 'none'; return; }
+
+  let txt = '請對帳：\\n';
+  txt += `file_ids: [${excels.map(e=>'"'+e.file_id+'"').join(', ')}]\\n`;
+  if (csv) txt += `paper_csv_id: "${csv.file_id}"\\n`;
+  txt += `(月份從檔名自動偵測，民國年 115)`;
+  snipEl.textContent = txt;
+  snipCard.style.display = 'block';
+}
+
+function removeFile(i) { uploaded.splice(i,1); render(); }
+function clearAll() { uploaded = []; render(); }
+function copySnip() {
+  navigator.clipboard.writeText(snipEl.textContent).then(()=>{
+    const old = event.target.textContent;
+    event.target.textContent = '✅ 已複製！';
+    setTimeout(()=>event.target.textContent=old, 1500);
+  });
+}
+</script>
+</body>
+</html>
+"""
+
+
+@app.get("/upload-ui", response_class=HTMLResponse, summary="上傳網頁（給人類用）")
+def upload_ui():
+    """簡單的 HTML 上傳介面，方便師父拖檔取得 file_id 後貼到 Chatbot UI。"""
+    return UPLOAD_UI_HTML
 
 
 @app.post("/upload", response_model=UploadResp, summary="上傳檔案（Excel 或 CSV）")
