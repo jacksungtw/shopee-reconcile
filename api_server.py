@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import List, Optional
 from datetime import datetime
 
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Header, Request
 from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -51,9 +51,14 @@ app.add_middleware(
 
 
 # ===== 共用 =====
-def _check_key(api_key: Optional[str]):
-    if API_KEY and api_key != API_KEY:
-        raise HTTPException(status_code=401, detail="Invalid or missing api_key")
+def _check_key(*candidates):
+    """檢查 API key（接受多種來源：header / query / body）"""
+    if not API_KEY:
+        return  # 未設定 API_KEY 表示不啟用驗證
+    for c in candidates:
+        if c and c == API_KEY:
+            return
+    raise HTTPException(status_code=401, detail="Invalid or missing api_key")
 
 
 def _save_uploads(files: List[UploadFile], session_dir: Path) -> List[Path]:
@@ -267,9 +272,10 @@ def upload_ui():
 
 @app.post("/upload", response_model=UploadResp, summary="上傳檔案（Excel 或 CSV）")
 async def upload(file: UploadFile = File(..., description="Excel (.xlsx) 或紙本 CSV"),
-                 api_key: Optional[str] = Form(None)):
+                 api_key: Optional[str] = Form(None),
+                 x_api_key: Optional[str] = Header(None)):
     """先上傳檔案，取得 file_id，再呼叫 /reconcile。"""
-    _check_key(api_key)
+    _check_key(api_key, x_api_key)
     file_id = uuid.uuid4().hex[:12]
     session_dir = STORAGE_DIR / file_id
     session_dir.mkdir(exist_ok=True)
@@ -281,9 +287,9 @@ async def upload(file: UploadFile = File(..., description="Excel (.xlsx) 或紙�
 
 
 @app.post("/reconcile", response_model=ReconcileResp, summary="對帳（用已上傳的 file_id）")
-def do_reconcile(req: ReconcileReq):
+def do_reconcile(req: ReconcileReq, x_api_key: Optional[str] = Header(None)):
     """主對帳端點：給 file_ids + month，回傳對帳結果 JSON + 下載 URL。"""
-    _check_key(req.api_key)
+    _check_key(req.api_key, x_api_key)
 
     # 解出 Excel 路徑
     excel_paths = []
