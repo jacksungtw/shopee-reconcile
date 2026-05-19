@@ -1,0 +1,19 @@
+services:
+  reconcile:
+    build: .
+    container_name: shopee-reconcile
+    restart: unless-stopped
+    ports:
+      - "8787:8787"
+    environment:
+      # 從 .env 讀（lab-agent 部署時建立 .env 即可）
+      SHOPEE_PASSWORD: ${SHOPEE_PASSWORD:-}
+      API_KEY: ${API_KEY:-}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
+      PORT: 8787
+      STORAGE_ROOT: /data
+    volumes:
+      - reconcile-data:/data
+
+volumes:
+  reconcile-data:
