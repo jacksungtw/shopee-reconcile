@@ -30,7 +30,7 @@ python api_server.py
 
 ```bash
 # 環境變數
-export SHOPEE_PASSWORD=108277          # Excel 解密密碼
+export SHOPEE_PASSWORD=your_password   # Excel 解密密碼
 export PUBLIC_BASE_URL=https://your-domain.com   # 對外網址
 export API_KEY=your_secret_key         # 可選，保護 API
 export STORAGE_DIR=/data/recon         # 檔案儲存路徑
@@ -74,7 +74,7 @@ CMD ["uvicorn", "api_server:app", "--host", "0.0.0.0", "--port", "8787"]
 
 ### 步驟 3：設定 Assistant
 
-到 **Assistants** → 編輯「無雲 RAG · 益山」（或新建）：
+到 **Assistants** → 新建一個專屬對帳的 Assistant（建議命名 `無雲 · Shopee 對帳`）：
 
 **System Prompt 範本：**
 ```
@@ -111,13 +111,13 @@ CMD ["uvicorn", "api_server:app", "--host", "0.0.0.0", "--port", "8787"]
    3. 拿到結果 markdown
 
 [Assistant 回覆]
-   ## 對帳結果
-   - 訂單筆數：1,384
-   - Excel 合計：1,993,797 元
-   - 紙本合計：1,987,577 元
-   - 差額：+6,220 元（吻合度 99.69%）
+   ## 對帳結果（範例數字）
+   - 訂單筆數：1,234
+   - Excel 合計：1,234,567 元
+   - 紙本合計：1,230,000 元
+   - 差額：+4,567 元（吻合度 99.5%）
    - Typo 修正：3 筆
-   - 差異日：2日, 3日, 10日, 16日, 23日, 26日, 27日, 30日, 31日
+   - 差異日：差額 > 3000 的日子會列出
 
    ### 下載報表
    - [對帳表_115年3月.xlsx](https://your-domain.com/download/xxx/對帳表.xlsx)

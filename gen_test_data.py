@@ -13,7 +13,7 @@ OUT_DIR.mkdir(exist_ok=True)
 
 TARGET_YEAR = 115
 TARGET_MONTH = 3
-PASSWORD = "108277"
+PASSWORD = "your_password_here"  # 測試用 placeholder，實際密碼放 .env
 
 # ---- 紙本對帳 CSV ----
 paper_days = {

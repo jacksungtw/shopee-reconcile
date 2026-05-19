@@ -29,7 +29,7 @@ if [ ! -f .env ]; then
   echo "[2/4] 建立 .env（首次部署）"
   cat > .env <<EOF
 # Shopee Excel 解密密碼
-SHOPEE_PASSWORD=108277
+SHOPEE_PASSWORD=your_password_here
 
 # Chatbot UI 呼叫 API 用的金鑰（自行生成隨機字串，建議 32 字以上）
 API_KEY=$(openssl rand -hex 24)
