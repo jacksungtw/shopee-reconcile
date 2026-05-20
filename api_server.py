@@ -506,9 +506,27 @@ def do_reconcile(req: ReconcileReq, x_api_key: Optional[str] = Header(None)):
     if not excel_paths:
         raise HTTPException(400, "沒找到任何 Excel 檔（請先 /upload）")
 
-    # 推測月份
+    # 找出紙本 CSV（順便用它的檔名偵測月份，最準）
     import re
+    csv_src = None
+    csv_month = None
+    if req.paper_csv_id:
+        d = STORAGE_DIR / req.paper_csv_id
+        csv_files = [f for f in d.iterdir() if f.suffix.lower() == ".csv"]
+        if csv_files:
+            csv_src = csv_files[0]
+            # 從檔名抓「X月」或「115年X月」
+            mm = re.search(r"(\d{1,2})\s*月", csv_src.name)
+            if mm:
+                csv_month = int(mm.group(1))
+
+    # 決定目標月份：
+    #   1) 使用者明確指定 → 最優先
+    #   2) 紙本 CSV 檔名（如「紙本對帳_115年3月.csv」）→ 次之（最貼合對帳意圖）
+    #   3) Excel 檔名最大月份 → 最後備援
     month = req.month
+    if month is None:
+        month = csv_month
     if month is None:
         months = []
         for p in excel_paths:
@@ -524,13 +542,10 @@ def do_reconcile(req: ReconcileReq, x_api_key: Optional[str] = Header(None)):
 
     # 紙本資料
     paper = {}
-    if req.paper_csv_id:
-        d = STORAGE_DIR / req.paper_csv_id
-        csv_files = [f for f in d.iterdir() if f.suffix.lower() == ".csv"]
-        if csv_files:
-            csv_target = out_dir / f"紙本對帳_{req.year}年{month}月.csv"
-            shutil.copy(csv_files[0], csv_target)
-            paper = load_paper_data(out_dir, req.year, month)
+    if csv_src is not None:
+        csv_target = out_dir / f"紙本對帳_{req.year}年{month}月.csv"
+        shutil.copy(csv_src, csv_target)
+        paper = load_paper_data(out_dir, req.year, month)
 
     # 跑對帳（呼叫主程式邏輯，但要捕捉結果，所以這裡用簡化版重新跑）
     result = _run_reconcile_capture(excel_paths, req.year, month, out_dir, paper)
