@@ -270,6 +270,209 @@ def upload_ui():
     return UPLOAD_UI_HTML
 
 
+APP_HTML = """<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Shopee 月結對帳</title>
+<style>
+:root{--c1:#1F4E78;--c2:#F4B084;--c3:#FFE699;--ok:#2e7d32;--bg:#f5f7fa}
+*{box-sizing:border-box}
+body{font-family:"Microsoft JhengHei","Segoe UI",sans-serif;background:var(--bg);
+     margin:0;padding:20px;color:#222}
+.wrap{max-width:860px;margin:0 auto}
+h1{color:var(--c1);font-size:23px;margin:0 0 4px}
+.sub{color:#667;font-size:13px;margin-bottom:18px}
+.card{background:#fff;border-radius:10px;padding:20px;margin-bottom:14px;
+      box-shadow:0 2px 6px rgba(0,0,0,.06)}
+.drop{border:2px dashed #aac;border-radius:10px;padding:40px 16px;text-align:center;
+      background:#fafbfd;cursor:pointer;transition:.2s}
+.drop:hover,.drop.over{background:#eef3fa;border-color:var(--c1)}
+.drop p{margin:0;color:#557}
+input[type=file]{display:none}
+.row{display:flex;gap:12px;align-items:center;margin:12px 0;flex-wrap:wrap}
+.row label{font-size:14px;color:#556}
+select,input[type=number]{padding:6px 10px;border:1px solid #ccd;border-radius:6px;font-size:14px}
+.filelist{margin:10px 0}
+.fitem{display:flex;justify-content:space-between;align-items:center;
+       padding:8px 10px;border-bottom:1px solid #eee;font-size:14px}
+.fitem:last-child{border:none}
+.tag{display:inline-block;padding:2px 8px;border-radius:3px;font-size:11px;margin-right:8px}
+.tag.xls{background:var(--c3);color:#664}
+.tag.csv{background:#cde;color:#246}
+.btn{background:var(--c1);color:#fff;border:none;padding:11px 26px;border-radius:7px;
+     cursor:pointer;font-size:15px;font-weight:bold}
+.btn:hover{opacity:.92}
+.btn:disabled{background:#aab;cursor:not-allowed}
+.btn.sm{padding:4px 10px;font-size:12px;background:#999;font-weight:normal}
+.result{display:none}
+.kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:14px 0}
+.kpi .box{background:#f4f7fb;border-radius:8px;padding:12px 14px;text-align:center}
+.kpi .box .v{font-size:22px;font-weight:bold;color:var(--c1)}
+.kpi .box .l{font-size:12px;color:#778;margin-top:3px}
+.kpi .box.good .v{color:var(--ok)}
+.kpi .box.warn .v{color:#c0392b}
+table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
+th,td{padding:6px 8px;border:1px solid #e3e8ef;text-align:center}
+th{background:var(--c1);color:#fff}
+tr.big td{background:#fdecea}
+tr.star td{background:#fff8e6}
+.dl a{display:inline-block;margin:4px 8px 4px 0;padding:8px 14px;background:var(--ok);
+      color:#fff;text-decoration:none;border-radius:6px;font-size:13px}
+.dl a:hover{opacity:.9}
+.spinner{display:none;text-align:center;padding:30px;color:#667}
+.spinner.on{display:block}
+.err{display:none;background:#fdecea;color:#c0392b;padding:12px 16px;border-radius:8px;
+     margin-top:10px;font-size:14px}
+.hint{font-size:12px;color:#8a93a0;margin-top:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Shopee 月結對帳</h1>
+  <div class="sub">拖入訂單 Excel（可多個）+ 紙本日結 CSV → 一鍵對帳，自動產出報表</div>
+
+  <div class="card">
+    <div id="drop" class="drop" onclick="document.getElementById('fi').click()">
+      <p>📎 把 Excel (.xlsx) 與紙本 CSV 拖到這裡</p>
+      <p style="font-size:12px;color:#99a;margin-top:6px">或點此選檔案（可一次多選）</p>
+    </div>
+    <input type="file" id="fi" multiple accept=".xlsx,.xls,.csv">
+    <div id="filelist" class="filelist"></div>
+    <div class="row">
+      <label>月份（留空自動偵測）：
+        <select id="month">
+          <option value="">自動</option>
+        </select>
+      </label>
+      <label>民國年：<input type="number" id="year" value="115" style="width:80px"></label>
+      <button class="btn" id="go" onclick="run()" disabled>開始對帳</button>
+    </div>
+    <div class="hint">※ 加密 Excel 會自動解密；同一訂單只算一次；退貨自動排除</div>
+  </div>
+
+  <div class="spinner card" id="spinner">⏳ 對帳中，請稍候…（首次約 10 秒）</div>
+  <div class="err card" id="err"></div>
+
+  <div class="card result" id="result">
+    <h2 style="margin:0 0 6px;color:var(--c1);font-size:18px" id="rtitle"></h2>
+    <div class="kpi" id="kpi"></div>
+    <div class="dl" id="dl"></div>
+    <h3 style="margin:18px 0 4px;font-size:15px;color:var(--c1)">逐日對帳</h3>
+    <div style="overflow-x:auto"><table id="daily"></table></div>
+  </div>
+</div>
+
+<script>
+let files = [];
+const drop=document.getElementById('drop'), fi=document.getElementById('fi'),
+      flist=document.getElementById('filelist'), go=document.getElementById('go');
+const msel=document.getElementById('month');
+for(let m=1;m<=12;m++){const o=document.createElement('option');o.value=m;o.textContent=m+'月';msel.appendChild(o);}
+
+['dragenter','dragover'].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.add('over')}));
+['dragleave','drop'].forEach(e=>drop.addEventListener(e,ev=>{ev.preventDefault();drop.classList.remove('over')}));
+drop.addEventListener('drop',ev=>addFiles(ev.dataTransfer.files));
+fi.addEventListener('change',()=>addFiles(fi.files));
+
+function addFiles(fl){
+  for(const f of fl) files.push(f);
+  render();
+}
+function render(){
+  if(files.length===0){flist.innerHTML='';go.disabled=true;return;}
+  flist.innerHTML=files.map((f,i)=>{
+    const csv=f.name.toLowerCase().endsWith('.csv');
+    return `<div class="fitem"><span><span class="tag ${csv?'csv':'xls'}">${csv?'紙本':'Excel'}</span>${f.name}</span>
+            <button class="btn sm" onclick="rm(${i})">移除</button></div>`;
+  }).join('');
+  go.disabled = !files.some(f=>!f.name.toLowerCase().endsWith('.csv'));
+}
+function rm(i){files.splice(i,1);render();}
+
+async function run(){
+  document.getElementById('result').style.display='none';
+  document.getElementById('err').style.display='none';
+  document.getElementById('spinner').classList.add('on');
+  go.disabled=true;
+  try{
+    // 1. 逐一上傳
+    const excelIds=[]; let csvId=null;
+    for(const f of files){
+      const fd=new FormData(); fd.append('file',f);
+      const r=await fetch('/upload',{method:'POST',body:fd});
+      if(!r.ok) throw new Error('上傳失敗: '+f.name);
+      const d=await r.json();
+      if(f.name.toLowerCase().endsWith('.csv')) csvId=d.file_id;
+      else excelIds.push(d.file_id);
+    }
+    // 2. 對帳
+    const body={file_ids:excelIds};
+    if(csvId) body.paper_csv_id=csvId;
+    const mv=document.getElementById('month').value;
+    if(mv) body.month=parseInt(mv);
+    body.year=parseInt(document.getElementById('year').value)||115;
+    const r2=await fetch('/app/reconcile',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(!r2.ok){const t=await r2.text();throw new Error('對帳失敗 ('+r2.status+'): '+t);}
+    const res=await r2.json();
+    showResult(res);
+  }catch(e){
+    document.getElementById('err').textContent='❌ '+e.message;
+    document.getElementById('err').style.display='block';
+  }finally{
+    document.getElementById('spinner').classList.remove('on');
+    go.disabled=false;
+  }
+}
+
+function showResult(res){
+  document.getElementById('rtitle').textContent='✅ '+res.target_month+' 對帳完成';
+  const ratio=res.match_ratio_percent;
+  const ratioClass = ratio>=95?'good':'warn';
+  const kpi=[
+    ['訂單筆數',res.order_count.toLocaleString(),''],
+    ['Excel 合計','$'+Math.round(res.excel_total).toLocaleString(),''],
+    ['紙本合計','$'+Math.round(res.paper_total).toLocaleString(),''],
+    ['差額',(res.diff>=0?'+':'')+Math.round(res.diff).toLocaleString(),''],
+    ['吻合度',ratio.toFixed(2)+'%',ratioClass],
+    ['Typo 修正',res.typo_count+' 筆',res.typo_count>0?'warn':''],
+  ];
+  document.getElementById('kpi').innerHTML=kpi.map(k=>
+    `<div class="box ${k[2]}"><div class="v">${k[1]}</div><div class="l">${k[0]}</div></div>`).join('');
+  document.getElementById('dl').innerHTML=Object.entries(res.downloads).map(
+    ([n,u])=>`<a href="${u}" target="_blank">📥 ${n}</a>`).join('');
+  // 逐日表
+  let html='<tr><th>日期</th><th>Excel筆數</th><th>Excel金額</th><th>紙本金額</th><th>差額</th><th>狀態</th></tr>';
+  for(const d of res.daily){
+    const cls=d.status==='★大'?'big':(d.status==='★'?'star':'');
+    html+=`<tr class="${cls}"><td>${d.day}日</td><td>${d.excel_count}</td>
+           <td>${Math.round(d.excel_amount).toLocaleString()}</td>
+           <td>${Math.round(d.paper_amount).toLocaleString()}</td>
+           <td>${(d.diff>=0?'+':'')+Math.round(d.diff).toLocaleString()}</td>
+           <td>${d.status}</td></tr>`;
+  }
+  document.getElementById('daily').innerHTML=html;
+  document.getElementById('result').style.display='block';
+}
+</script>
+</body>
+</html>
+"""
+
+
+@app.get("/app", response_class=HTMLResponse, summary="對帳網頁（整合式，給人類用）")
+def app_ui():
+    """一站式對帳網頁：拖檔 → 自動對帳 → 顯示結果 + 下載。"""
+    return APP_HTML
+
+
+@app.post("/app/reconcile", response_model=ReconcileResp, summary="網頁專用對帳端點")
+def app_reconcile(req: ReconcileReq, x_api_key: Optional[str] = Header(None)):
+    """與 /reconcile 相同邏輯，路徑在 /app 下方便 Caddy 自動注入 API key。"""
+    return do_reconcile(req, x_api_key)
+
+
 @app.post("/upload", response_model=UploadResp, summary="上傳檔案（Excel 或 CSV）")
 async def upload(file: UploadFile = File(..., description="Excel (.xlsx) 或紙本 CSV"),
                  api_key: Optional[str] = Form(None),
